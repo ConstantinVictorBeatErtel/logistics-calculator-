@@ -232,18 +232,25 @@ st.markdown('<div class="section-header"><h2>🔍 4 — Quality Assurance</h2></
 with st.expander("Assumptions", expanded=False):
     qa_col1, qa_col2 = st.columns(2)
     with qa_col1:
-        qa_days_available = st.number_input("Days available for QA", value=7, step=1, min_value=1, key="qa_days")
+        num_reviewers = st.number_input("Number of reviewers", value=1, step=1, min_value=1, key="qa_num_rev")
+        reviewer_hours_day = st.number_input("Reviewer hours / day", value=5.0, step=0.5, min_value=0.5, key="qa_rev_hpd")
     with qa_col2:
-        st.caption(f"QA review time per submission: **{qa_review_time} min** (set in Time section)")
+        st.caption(f"QA review time per submission: **{qa_review_time} min** (from Time section)")
+        st.caption(f"Total reviews needed: **{total_required}** (from Volume section)")
 
+# Auto-calculate QA days
+total_review_minutes = total_required * qa_review_time
+reviewer_minutes_per_day = num_reviewers * reviewer_hours_day * 60
+qa_days_available = math.ceil(total_review_minutes / max(reviewer_minutes_per_day, 1))
 reviews_per_day = total_required / max(qa_days_available, 1)
 qa_hours_per_day = reviews_per_day * qa_review_time / 60
 
-qa1, qa2, qa3 = st.columns(3)
+qa1, qa2, qa3, qa4 = st.columns(4)
 qa1.metric("Total Reviews", total_required)
-qa2.metric("Reviews / Day", f"~{reviews_per_day:.1f}")
-qa3.metric("QA Hours / Day", f"{qa_hours_per_day:.1f} hrs")
-st.caption(f"ℹ️ Total reviews trickle down from **Volume** ({total_required}) · Review time from **Time** ({qa_review_time} min).")
+qa2.metric("QA Days Needed", f"{qa_days_available}")
+qa3.metric("Reviews / Day", f"~{reviews_per_day:.1f}")
+qa4.metric("QA Hours / Day", f"{qa_hours_per_day:.1f} hrs")
+st.caption(f"ℹ️ QA days = ⌈{total_required} reviews × {qa_review_time} min ÷ ({num_reviewers} reviewers × {reviewer_hours_day}h × 60)⌉ = **{qa_days_available} days**")
 st.divider()
 
 
@@ -384,37 +391,45 @@ st.divider()
 # ══════════════════════════════════════════════════════════════════════════════
 st.markdown('<div class="section-header"><h2>📅 6 — Timeline</h2></div>', unsafe_allow_html=True)
 
+# Auto-calculate data creation days from worker capacity
+days_data = math.ceil(max(days_c_worker, days_b_worker, 1))
+
 with st.expander("Assumptions", expanded=False):
     tl1, tl2 = st.columns(2)
     with tl1:
-        days_data = st.number_input("Data creation + checking (days)", value=7, step=1, min_value=1, key="tl_data")
         days_meeting = st.number_input("Customer meeting (days)", value=1, step=1, min_value=0, key="tl_meet")
         days_finding = st.number_input("Finding people (days)", value=1, step=1, min_value=0, key="tl_find")
-    with tl2:
         days_testing = st.number_input("Testing (days)", value=1, step=1, min_value=0, key="tl_test")
+    with tl2:
         days_compiling = st.number_input("Compiling & final check (days)", value=1, step=1, min_value=0, key="tl_comp")
         days_buffer = st.number_input("Buffer (days)", value=1, step=1, min_value=0, key="tl_buf")
+    st.caption(f"Data creation days: **{days_data}** (auto-calculated from worker capacity in People section)")
+    st.caption(f"QA days: **{qa_days_available}** (auto-calculated in QA section)")
 
 timeline_items = [
     ("Finding people", days_finding),
     ("Testing / qualification", days_testing),
     ("Data creation + checking", days_data),
+    ("QA review (parallel with creation)", qa_days_available),
     ("Customer meeting", days_meeting),
     ("Compiling & final check", days_compiling),
     ("Buffer", days_buffer),
 ]
-total_days = sum(d for _, d in timeline_items)
+# QA runs in parallel with data creation, so take the max of the two
+data_qa_parallel = max(days_data, qa_days_available)
+sequential_days = days_finding + days_testing + data_qa_parallel + days_meeting + days_compiling + days_buffer
 
 timeline_df = pd.DataFrame(timeline_items, columns=["Phase", "Days"])
-timeline_df["Start Day"] = timeline_df["Days"].cumsum() - timeline_df["Days"]
-timeline_df["End Day"] = timeline_df["Days"].cumsum()
 
 tc1, tc2 = st.columns([2, 1])
 with tc1:
     st.dataframe(timeline_df, width="stretch", hide_index=True)
+    st.caption(f"ℹ️ Data creation ({days_data}d) and QA ({qa_days_available}d) run in parallel → **{data_qa_parallel}d** for that block.")
 with tc2:
-    st.metric("Total Project Duration", f"{total_days} days")
-    st.metric("~Calendar Weeks", f"{math.ceil(total_days / 5):.0f} weeks")
+    st.metric("Total Project Duration", f"{sequential_days} days")
+    st.metric("~Calendar Weeks", f"{math.ceil(sequential_days / 5):.0f} weeks")
+
+total_days = sequential_days
 
 
 # ══════════════════════════════════════════════════════════════════════════════
