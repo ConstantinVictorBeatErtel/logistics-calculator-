@@ -252,26 +252,87 @@ st.divider()
 # ══════════════════════════════════════════════════════════════════════════════
 st.markdown('<div class="section-header"><h2>💰 5 — Money</h2></div>', unsafe_allow_html=True)
 
-with st.expander("Assumptions", expanded=False):
+with st.expander("Assumptions — Labour", expanded=False):
     mo1, mo2 = st.columns(2)
     with mo1:
         worker_hourly = st.number_input("Worker hourly rate ($)", value=20.0, step=1.0, min_value=1.0, key="mo_wh")
         reviewer_hourly = st.number_input("Reviewer hourly rate ($)", value=50.0, step=5.0, min_value=1.0, key="mo_rh")
     with mo2:
         reviewer_hours = st.number_input("Total reviewer hours", value=5.0, step=1.0, min_value=0.0, key="mo_rhrs")
-        tech_cost = st.number_input("Tech cost ($)", value=0.0, step=50.0, min_value=0.0, key="mo_tech")
 
-# Money calcs
+with st.expander("Assumptions — Tech Cost", expanded=False):
+    tc1, tc2 = st.columns(2)
+    with tc1:
+        st.markdown("**Infrastructure**")
+        cost_filings = st.number_input("Filings ($)", value=0.0, step=5.0, min_value=0.0, key="tc_filings")
+        cost_auto_check = st.number_input("Automated checking ($)", value=20.0, step=5.0, min_value=0.0, key="tc_autocheck")
+        cost_database = st.number_input("Database ($)", value=30.0, step=5.0, min_value=0.0, key="tc_db")
+
+    with tc2:
+        st.markdown("**LLM — Token Pricing**")
+        llm_price_input = st.number_input("Input token price ($/M)", value=2.0, step=0.5, min_value=0.0, key="tc_llm_pin")
+        llm_price_output = st.number_input("Output token price ($/M)", value=12.0, step=1.0, min_value=0.0, key="tc_llm_pout")
+
+    st.markdown("---")
+    st.markdown("**LLM — Submissions**")
+    st.caption(f"Number of submissions: **{total_required}** (from Volume section)")
+    lc1, lc2 = st.columns(2)
+    with lc1:
+        st.markdown("*Without SEC filing context*")
+        tok_sub_in_nosec = st.number_input("Input tokens / question", value=2000, step=500, min_value=0, key="tc_sub_in_nosec")
+        tok_sub_out_nosec = st.number_input("Output tokens / question", value=100, step=50, min_value=0, key="tc_sub_out_nosec")
+    with lc2:
+        st.markdown("*With SEC filing context*")
+        tok_sub_in_sec = st.number_input("Input tokens / question", value=50000, step=5000, min_value=0, key="tc_sub_in_sec")
+        tok_sub_out_sec = st.number_input("Output tokens / question", value=100, step=50, min_value=0, key="tc_sub_out_sec")
+
+    st.markdown("---")
+    st.markdown("**LLM — Evaluations**")
+    num_evals = st.number_input("Number of evaluations", value=total_required, step=1, min_value=0, key="tc_num_evals")
+    le1, le2 = st.columns(2)
+    with le1:
+        tok_eval_in = st.number_input("Input tokens / eval", value=1000, step=500, min_value=0, key="tc_eval_in")
+    with le2:
+        tok_eval_out = st.number_input("Output tokens / eval", value=100, step=50, min_value=0, key="tc_eval_out")
+
+# ── LLM cost calcs ───────────────────────────────────────────────────────────
+# Submissions — without SEC
+total_sub_in_nosec = total_required * tok_sub_in_nosec
+total_sub_out_nosec = total_required * tok_sub_out_nosec
+cost_sub_nosec_in = total_sub_in_nosec / 1_000_000 * llm_price_input
+cost_sub_nosec_out = total_sub_out_nosec / 1_000_000 * llm_price_output
+cost_sub_nosec = cost_sub_nosec_in + cost_sub_nosec_out
+
+# Submissions — with SEC
+total_sub_in_sec = total_required * tok_sub_in_sec
+total_sub_out_sec = total_required * tok_sub_out_sec
+cost_sub_sec_in = total_sub_in_sec / 1_000_000 * llm_price_input
+cost_sub_sec_out = total_sub_out_sec / 1_000_000 * llm_price_output
+cost_sub_sec = cost_sub_sec_in + cost_sub_sec_out
+
+# Evaluations
+total_eval_in = num_evals * tok_eval_in
+total_eval_out = num_evals * tok_eval_out
+cost_eval_in = total_eval_in / 1_000_000 * llm_price_input
+cost_eval_out = total_eval_out / 1_000_000 * llm_price_output
+cost_eval = cost_eval_in + cost_eval_out
+
+total_llm_cost = cost_sub_sec + cost_eval  # conservative: use "with SEC" variant
+infra_cost = cost_filings + cost_auto_check + cost_database
+tech_cost = infra_cost + total_llm_cost
+
+# ── Labour calcs ─────────────────────────────────────────────────────────────
 worker_cost = total_annotation_time / 60 * worker_hourly
 qual_cost = workers_to_invite * qual_time / 60 * worker_hourly
 reviewer_cost = reviewer_hourly * reviewer_hours
 total_cost = worker_cost + qual_cost + reviewer_cost + tech_cost
 
+# ── Dashboard ─────────────────────────────────────────────────────────────────
 mo_a, mo_b, mo_c, mo_d = st.columns(4)
 mo_a.metric("Worker Cost", f"${worker_cost:,.0f}")
 mo_b.metric("Qualification Cost", f"${qual_cost:,.0f}")
 mo_c.metric("Reviewer Cost", f"${reviewer_cost:,.0f}")
-mo_d.metric("Tech Cost", f"${tech_cost:,.0f}")
+mo_d.metric("Tech Cost", f"${tech_cost:,.2f}")
 
 budget_df = pd.DataFrame({
     "Line Item": ["Worker Annotation", "Qualification Testing", "Expert Review", "Tech / Infrastructure", "TOTAL"],
@@ -279,13 +340,42 @@ budget_df = pd.DataFrame({
         f"Total annotation time ÷ 60 × hourly rate → {total_annotation_time} min ÷ 60 × ${worker_hourly:.0f}",
         f"Invitations × qual time ÷ 60 × hourly rate → {workers_to_invite} × {qual_time} min ÷ 60 × ${worker_hourly:.0f}",
         f"Reviewer rate × hours → ${reviewer_hourly:.0f} × {reviewer_hours:.0f}h",
-        "Filings + LLMs + DB + tools",
+        f"Infra ${infra_cost:.0f} + LLM ${total_llm_cost:.2f}",
         "",
     ],
-    "Cost": [f"${worker_cost:,.0f}", f"${qual_cost:,.0f}", f"${reviewer_cost:,.0f}", f"${tech_cost:,.0f}", f"${total_cost:,.0f}"],
+    "Cost": [f"${worker_cost:,.0f}", f"${qual_cost:,.0f}", f"${reviewer_cost:,.0f}", f"${tech_cost:,.2f}", f"${total_cost:,.2f}"],
 })
 st.dataframe(budget_df, width="stretch", hide_index=True)
-st.caption("ℹ️  All figures trickle down: annotation time from **Time**, invitations from **People**, qual time from **Time**.")
+
+# Tech cost detail table
+st.markdown("#### 🖥️ Tech Cost Breakdown")
+tech_df = pd.DataFrame({
+    "Component": [
+        "Filings", "Automated checking", "Database",
+        f"LLM Submissions w/o SEC ({total_required}×)",
+        f"LLM Submissions w/ SEC ({total_required}×)",
+        f"LLM Evaluations ({num_evals}×)",
+        "Total LLM (conservative, w/ SEC)",
+        "TOTAL TECH",
+    ],
+    "Tokens In": [
+        "—", "—", "—",
+        f"{total_sub_in_nosec:,}", f"{total_sub_in_sec:,}", f"{total_eval_in:,}",
+        f"{total_sub_in_sec + total_eval_in:,}", "—",
+    ],
+    "Tokens Out": [
+        "—", "—", "—",
+        f"{total_sub_out_nosec:,}", f"{total_sub_out_sec:,}", f"{total_eval_out:,}",
+        f"{total_sub_out_sec + total_eval_out:,}", "—",
+    ],
+    "Cost": [
+        f"${cost_filings:.2f}", f"${cost_auto_check:.2f}", f"${cost_database:.2f}",
+        f"${cost_sub_nosec:.2f}", f"${cost_sub_sec:.2f}", f"${cost_eval:.2f}",
+        f"${total_llm_cost:.2f}", f"${tech_cost:.2f}",
+    ],
+})
+st.dataframe(tech_df, width="stretch", hide_index=True)
+st.caption(f"ℹ️  Submissions ({total_required}) flow from **Volume** · Token pricing at ${llm_price_input}/M input, ${llm_price_output}/M output.")
 st.divider()
 
 
