@@ -126,13 +126,10 @@ total_time_a = cat_a_required * time_a
 total_time_b = cat_b_required * time_b
 total_time_c = cat_c_required * time_c
 total_annotation_time = total_time_a + total_time_b + total_time_c
-total_qa_time = total_required * qa_review_time
+# NOTE: total_qa_time is computed later in the QA section (after review rates are set)
 
 # Dashboard
-tm1, tm2, tm3 = st.columns(3)
-tm1.metric("Total Annotation Time", f"{total_annotation_time} min ({total_annotation_time/60:.1f} hrs)")
-tm2.metric("Total QA Time", f"{total_qa_time} min ({total_qa_time/60:.1f} hrs)")
-tm3.metric("Combined Time", f"{(total_annotation_time + total_qa_time)/60:.1f} hrs")
+st.metric("Total Annotation Time", f"{total_annotation_time} min ({total_annotation_time/60:.1f} hrs)")
 
 time_df = pd.DataFrame({
     "Category": ["A (Simple)", "B (Reasoning)", "C (Synthesis)", "Total"],
@@ -235,22 +232,48 @@ with st.expander("Assumptions", expanded=False):
         num_reviewers = st.number_input("Number of reviewers", value=1, step=1, min_value=1, key="qa_num_rev")
         reviewer_hours_day = st.number_input("Reviewer hours / day", value=5.0, step=0.5, min_value=0.5, key="qa_rev_hpd")
     with qa_col2:
-        st.caption(f"QA review time per submission: **{qa_review_time} min** (from Time section)")
-        st.caption(f"Total reviews needed: **{total_required}** (from Volume section)")
+        st.markdown("**Review rate per category**")
+        review_rate_a = st.slider("Cat A review %", 0, 100, 30, 5, key="qa_rev_a")
+        review_rate_b = st.slider("Cat B review %", 0, 100, 50, 5, key="qa_rev_b")
+        review_rate_c = st.slider("Cat C review %", 0, 100, 60, 5, key="qa_rev_c")
+    st.caption(f"QA review time per submission: **{qa_review_time} min** (from Time section)")
+
+# Per-category review counts
+reviews_a = math.ceil(cat_a_required * review_rate_a / 100)
+reviews_b = math.ceil(cat_b_required * review_rate_b / 100)
+reviews_c = math.ceil(cat_c_required * review_rate_c / 100)
+total_reviews = reviews_a + reviews_b + reviews_c
+
+# Now compute total_qa_time (deferred from Time section)
+total_qa_time = total_reviews * qa_review_time
 
 # Auto-calculate QA days
-total_review_minutes = total_required * qa_review_time
+total_review_minutes = total_reviews * qa_review_time
 reviewer_minutes_per_day = num_reviewers * reviewer_hours_day * 60
 qa_days_available = math.ceil(total_review_minutes / max(reviewer_minutes_per_day, 1))
-reviews_per_day = total_required / max(qa_days_available, 1)
+reviews_per_day = total_reviews / max(qa_days_available, 1)
 qa_hours_per_day = reviews_per_day * qa_review_time / 60
 
+# Review count breakdown
+st.markdown("#### Review Counts")
+review_df = pd.DataFrame({
+    "Category": ["A (Simple)", "B (Reasoning)", "C (Synthesis)", "Total"],
+    "Required Subs": [cat_a_required, cat_b_required, cat_c_required, total_required],
+    "Review Rate": [f"{review_rate_a}%", f"{review_rate_b}%", f"{review_rate_c}%", f"{total_reviews}/{total_required}"],
+    "Reviews": [reviews_a, reviews_b, reviews_c, total_reviews],
+})
+st.dataframe(review_df, width="stretch", hide_index=True)
+
 qa1, qa2, qa3, qa4 = st.columns(4)
-qa1.metric("Total Reviews", total_required)
+qa1.metric("Total Reviews", total_reviews)
 qa2.metric("QA Days Needed", f"{qa_days_available}")
 qa3.metric("Reviews / Day", f"~{reviews_per_day:.1f}")
 qa4.metric("QA Hours / Day", f"{qa_hours_per_day:.1f} hrs")
-st.caption(f"ℹ️ QA days = ⌈{total_required} reviews × {qa_review_time} min ÷ ({num_reviewers} reviewers × {reviewer_hours_day}h × 60)⌉ = **{qa_days_available} days**")
+
+qa5, qa6 = st.columns(2)
+qa5.metric("Total QA Time", f"{total_qa_time} min ({total_qa_time/60:.1f} hrs)")
+qa6.metric("Combined Time (Annotation + QA)", f"{(total_annotation_time + total_qa_time)/60:.1f} hrs")
+st.caption(f"ℹ️ QA days = ⌈{total_reviews} reviews × {qa_review_time} min ÷ ({num_reviewers} reviewers × {reviewer_hours_day}h × 60)⌉ = **{qa_days_available} days**")
 st.divider()
 
 
@@ -265,7 +288,7 @@ with st.expander("Assumptions — Labour", expanded=False):
         worker_hourly = st.number_input("Worker hourly rate ($)", value=20.0, step=1.0, min_value=1.0, key="mo_wh")
         reviewer_hourly = st.number_input("Reviewer hourly rate ($)", value=50.0, step=5.0, min_value=1.0, key="mo_rh")
     with mo2:
-        st.caption(f"Total reviewer hours: **{total_qa_time / 60:.1f}h** (auto-calculated from QA section: {total_required} reviews × {qa_review_time} min ÷ 60)")
+        st.caption(f"Total reviewer hours: **{total_qa_time / 60:.1f}h** (auto-calculated from QA section: {total_reviews} reviews × {qa_review_time} min ÷ 60)")
 
 with st.expander("Assumptions — Tech Cost", expanded=False):
     tc1, tc2 = st.columns(2)
