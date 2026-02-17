@@ -265,7 +265,7 @@ with st.expander("Assumptions — Labour", expanded=False):
         worker_hourly = st.number_input("Worker hourly rate ($)", value=20.0, step=1.0, min_value=1.0, key="mo_wh")
         reviewer_hourly = st.number_input("Reviewer hourly rate ($)", value=50.0, step=5.0, min_value=1.0, key="mo_rh")
     with mo2:
-        reviewer_hours = st.number_input("Total reviewer hours", value=5.0, step=1.0, min_value=0.0, key="mo_rhrs")
+        st.caption(f"Total reviewer hours: **{total_qa_time / 60:.1f}h** (auto-calculated from QA section: {total_required} reviews × {qa_review_time} min ÷ 60)")
 
 with st.expander("Assumptions — Tech Cost", expanded=False):
     tc1, tc2 = st.columns(2)
@@ -331,7 +331,7 @@ tech_cost = infra_cost + total_llm_cost
 # ── Labour calcs ─────────────────────────────────────────────────────────────
 worker_cost = total_annotation_time / 60 * worker_hourly
 qual_cost = workers_to_invite * qual_time / 60 * worker_hourly
-reviewer_cost = reviewer_hourly * reviewer_hours
+reviewer_cost = total_qa_time / 60 * reviewer_hourly
 total_cost = worker_cost + qual_cost + reviewer_cost + tech_cost
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────
@@ -346,7 +346,7 @@ budget_df = pd.DataFrame({
     "Formula": [
         f"Total annotation time ÷ 60 × hourly rate → {total_annotation_time} min ÷ 60 × ${worker_hourly:.0f}",
         f"Invitations × qual time ÷ 60 × hourly rate → {workers_to_invite} × {qual_time} min ÷ 60 × ${worker_hourly:.0f}",
-        f"Reviewer rate × hours → ${reviewer_hourly:.0f} × {reviewer_hours:.0f}h",
+        f"Reviewer rate × hours → ${reviewer_hourly:.0f} × {total_qa_time / 60:.1f}h",
         f"Infra ${infra_cost:.0f} + LLM ${total_llm_cost:.2f}",
         "",
     ],
@@ -433,6 +433,23 @@ total_days = sequential_days
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# 7. QUALIFICATION TIMELINE
+# ══════════════════════════════════════════════════════════════════════════════
+st.markdown('<div class="section-header"><h2>📋 7 — Qualification Timeline</h2></div>', unsafe_allow_html=True)
+
+qual_timeline_data = [
+    ("Day 1–2", "Platform pool filtering and invitation"),
+    ("Day 3–4", "Qualification test completion window (candidates have 36 hours to start once invited, must complete in one 45-minute session)"),
+    ("Day 5", "Automated scoring and flagging for manual review"),
+    ("Day 6", "Manual review of flagged submissions and final selection"),
+    ("Day 7", "Results communication and onboarding for qualified workers"),
+]
+qual_timeline_df = pd.DataFrame(qual_timeline_data, columns=["Day", "Activity"])
+st.dataframe(qual_timeline_df, width="stretch", hide_index=True)
+st.divider()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # FILL THE SUMMARY AT THE TOP (now that all values are computed)
 # ══════════════════════════════════════════════════════════════════════════════
 with summary_container:
@@ -444,5 +461,48 @@ with summary_container:
     s4.metric("👥 Invitations Needed", f"{workers_to_invite}")
     s5.metric("⏱️ Annotation Hours", f"{total_annotation_time/60:.1f}")
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+# COST SUMMARY TABLE (white bg, black text, Arial font)
+# ══════════════════════════════════════════════════════════════════════════════
 st.divider()
+
+cost_summary_html = f"""
+<div style="background-color: #ffffff; padding: 24px 28px; border-radius: 12px; border: 1px solid #e0e0e0; margin-top: 8px;">
+  <h3 style="color: #000000; font-family: Arial, sans-serif; margin-top: 0; margin-bottom: 16px;">Cost Summary by Category</h3>
+  <table style="width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; color: #000000;">
+    <thead>
+      <tr style="border-bottom: 2px solid #333333;">
+        <th style="text-align: left; padding: 10px 12px; font-weight: 700; background-color: #f5f5f5; color: #000000;">Category</th>
+        <th style="text-align: right; padding: 10px 12px; font-weight: 700; background-color: #f5f5f5; color: #000000;">Cost</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom: 1px solid #e0e0e0;">
+        <td style="padding: 10px 12px; color: #000000;">Worker Annotation</td>
+        <td style="text-align: right; padding: 10px 12px; color: #000000;">${worker_cost:,.2f}</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #e0e0e0;">
+        <td style="padding: 10px 12px; color: #000000;">Qualification Testing</td>
+        <td style="text-align: right; padding: 10px 12px; color: #000000;">${qual_cost:,.2f}</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #e0e0e0;">
+        <td style="padding: 10px 12px; color: #000000;">Expert Review (QA)</td>
+        <td style="text-align: right; padding: 10px 12px; color: #000000;">${reviewer_cost:,.2f}</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #e0e0e0;">
+        <td style="padding: 10px 12px; color: #000000;">Tech / Infrastructure</td>
+        <td style="text-align: right; padding: 10px 12px; color: #000000;">${tech_cost:,.2f}</td>
+      </tr>
+      <tr style="border-top: 2px solid #333333; background-color: #f5f5f5;">
+        <td style="padding: 10px 12px; font-weight: 700; color: #000000;">TOTAL</td>
+        <td style="text-align: right; padding: 10px 12px; font-weight: 700; color: #000000;">${total_cost:,.2f}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+"""
+st.markdown(cost_summary_html, unsafe_allow_html=True)
+
+st.markdown("<br>", unsafe_allow_html=True)
 st.caption("Built for Surge AI case study logistics planning. Every number trickles through — change one assumption and the rest follows.")
