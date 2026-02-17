@@ -330,7 +330,7 @@ tech_cost = infra_cost + total_llm_cost
 
 # ── Labour calcs ─────────────────────────────────────────────────────────────
 worker_cost = total_annotation_time / 60 * worker_hourly
-qual_cost = workers_to_invite * qual_time / 60 * worker_hourly
+qual_cost = workers_before_pass * qual_time / 60 * worker_hourly
 reviewer_cost = total_qa_time / 60 * reviewer_hourly
 total_cost = worker_cost + qual_cost + reviewer_cost + tech_cost
 
@@ -345,7 +345,7 @@ budget_df = pd.DataFrame({
     "Line Item": ["Worker Annotation", "Qualification Testing", "Expert Review", "Tech / Infrastructure", "TOTAL"],
     "Formula": [
         f"Total annotation time ÷ 60 × hourly rate → {total_annotation_time} min ÷ 60 × ${worker_hourly:.0f}",
-        f"Invitations × qual time ÷ 60 × hourly rate → {workers_to_invite} × {qual_time} min ÷ 60 × ${worker_hourly:.0f}",
+        f"Test-takers × qual time ÷ 60 × hourly rate → {workers_before_pass} × {qual_time} min ÷ 60 × ${worker_hourly:.0f}",
         f"Reviewer rate × hours → ${reviewer_hourly:.0f} × {total_qa_time / 60:.1f}h",
         f"Infra ${infra_cost:.0f} + LLM ${total_llm_cost:.2f}",
         "",
